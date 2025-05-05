@@ -1,0 +1,8 @@
+Software uses sockets to communicate between server and client
+
+uses json to communicate
+
+login: {"username": ___, "password": ___} server response {"message": "logged in"} or "{"error": "login failed"}"
+
+actions -
+enqueue: {"action": "enqueue", "gameType" : ___}
