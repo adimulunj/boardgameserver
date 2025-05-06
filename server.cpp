@@ -4,6 +4,8 @@
 #include <thread>
 #include <vector>
 #include <mutex>
+#include <queue>
+#include <fstream>
 
 #include "json.hpp"  
 
@@ -14,10 +16,17 @@ using json = nlohmann::json;
 
 #pragma comment(lib, "ws2_32.lib")
 
+//defining games file
+#define GAMES_FILE "games.txt"
+
 //defining port and server global vars and mutex
 #define PORT 8080
 
+
 std::mutex coutMutex;
+
+std::vector<std::queue<int>                                                                                                                                                                                                 > queues;
+std::vector<std::string> games;
 
 std::vector<SOCKET> clients;
 std::mutex clientsMutex;
@@ -82,19 +91,29 @@ void handleClient(SOCKET clientSocket, int clientID) {
                 // Access elements like a dictionary
                 if (receivedJson.contains("action")) {
 
-                    
-
                     std::string action = receivedJson["action"];
-                    if (action == "enqueue") {
-                        std::lock_guard<std::mutex> lock(coutMutex);
-                        std::cout << "Enqueuing Client " << clientID << std::endl;
+                    if (action == "enqueue" && receivedJson.contains("gametype")) {
+                        //get game type
+                        int gameType = int(receivedJson["gametype"]);
 
-                        //TODO: add client to queue
+                        std::lock_guard<std::mutex> lock(coutMutex);
+                        std::cout << "Enqueuing Client " << clientID << " to game " << games[gameType] << std::endl;
+
+                        
+                        queues[gameType].push(clientID);
 
                         //send message to client
                         std::string message = "{\"message\" : \"enqueued\"}";
                         broadcastToClient(message, clientSocket, clientSocket);
                     }
+                    else{
+                        std::string message = "{\"error\": \"unable to interpret sent action\"}";
+                        broadcastToClient(message, clientSocket, clientSocket);
+                    }
+                }
+                else{
+                    std::string message = "{\"error\": \"unable to interpret sent message\"}";
+                    broadcastToClient(message, clientSocket, clientSocket);
                 }
             
                 // Optional: use the whole JSON to construct a response
@@ -146,7 +165,41 @@ void handleClient(SOCKET clientSocket, int clientID) {
     closesocket(clientSocket);
 }
 
+void queueingThread()
+{
+    while(true){
+
+    }
+}
+
+bool loadGamesData()
+{
+    std::ifstream inputFile(GAMES_FILE);
+    if(!inputFile){
+        std::cerr << "unable to open file." << std::endl;
+        return false;
+    }
+    std::string line;
+    while(std::getline(inputFile, line))
+    {
+        games.push_back(line);
+        //initialize queues
+        std::queue<int> gameQ;
+        queues.push_back(gameQ);
+    }
+
+    inputFile.close();
+    return true;
+}
+
 int main() {
+    //load games data
+    if(!loadGamesData())
+    {
+        std::cerr << "unable to load games data shutting server";
+        return 1;
+    }
+
     WSADATA wsaData;
     SOCKET serverSocket;
     struct sockaddr_in serverAddr, clientAddr;
@@ -183,6 +236,9 @@ int main() {
         return 1;
     }
 
+    //start queueing thread
+    std::thread  queingT(queueingThread);
+
     std::cout << "Multi-client server running on port " << PORT << "...\n";
 
     int clientID = 1;
@@ -200,6 +256,8 @@ int main() {
     }
 
     // You can optionally join threads if you plan to shut down the server cleanly.
+    if(queingT.joinable()) queingT.join();
+    
     for (auto &t : clientThreads) {
         if (t.joinable()) t.join();
     }

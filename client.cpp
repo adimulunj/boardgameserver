@@ -107,7 +107,7 @@ bool enqueue()
                 if(games[i] == input)
                 {
                     //make the message
-                    std::string message = "{\"action\": \"enqueue\", \"gametype\": \"" + std::to_string(i) + "\"}";
+                    std::string message = "{\"action\": \"enqueue\", \"gametype\": " + std::to_string(i) + "}";
 
                     send(sock, message.c_str(), static_cast<int>(message.length()), 0);
 
@@ -115,7 +115,6 @@ bool enqueue()
                     while(!messageRecieved)
                     {
                         std::this_thread::sleep_for(std::chrono::seconds(2));
-                        std::cout << messageRecieved << std::endl;
                     }
                     messageRecieved = false;
 
@@ -227,6 +226,10 @@ int main() {
         std::getline(std::cin, input);
         if (input == "/quit") {
             running = false;
+            return 0;
+        }
+        else if (!running)
+        {
             return 0;
         }
         send(sock, input.c_str(), static_cast<int>(input.length()), 0);
