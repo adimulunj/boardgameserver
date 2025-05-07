@@ -6,3 +6,5 @@ login: {"username": ___, "password": ___} server response {"message": "logged in
 
 actions -
 enqueue: {"action": "enqueue", "gameType" : ___}
+
+List of games and their data is stored in games.txt where the format is game_name, minimum players, maximum players

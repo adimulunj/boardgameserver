@@ -15,7 +15,7 @@ using json = nlohmann::json;
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8080
-#define GAMES_FILE "games.txt"
+#define GAMES_FILE "gamesclient.txt"
 
 SOCKET sock;
 std::atomic<bool> running(true);

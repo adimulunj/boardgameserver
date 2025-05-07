@@ -6,6 +6,7 @@
 #include <mutex>
 #include <queue>
 #include <fstream>
+#include <sstream>
 
 #include "json.hpp"  
 
@@ -22,12 +23,19 @@ using json = nlohmann::json;
 //defining port and server global vars and mutex
 #define PORT 8080
 
-
+//printing mutex
 std::mutex coutMutex;
 
-std::vector<std::queue<int>                                                                                                                                                                                                 > queues;
+//queing and games info (in pair, clientId, client socked)
+std::vector<std::queue<std::pair<int, SOCKET>>                                                                                                                                                                                                > queues;
 std::vector<std::string> games;
+std::vector<std::vector<int>> gamesdata;
 
+//ongoing games info
+//vector of games [[game_id, game_type, game_status, client 1, client 2],[0102929, 0, (0 play or 1 end), 1, 2]]
+std::vector<std::vector<int>> ongoing_games;
+
+//clients and client mutex
 std::vector<SOCKET> clients;
 std::mutex clientsMutex;
 
@@ -96,11 +104,12 @@ void handleClient(SOCKET clientSocket, int clientID) {
                         //get game type
                         int gameType = int(receivedJson["gametype"]);
 
-                        std::lock_guard<std::mutex> lock(coutMutex);
                         std::cout << "Enqueuing Client " << clientID << " to game " << games[gameType] << std::endl;
-
                         
-                        queues[gameType].push(clientID);
+                        //mutx lock
+                        std::unique_lock<std::mutex> lock(clientsMutex);
+                        queues[gameType].push({clientID, clientSocket});
+                        lock.unlock();
 
                         //send message to client
                         std::string message = "{\"message\" : \"enqueued\"}";
@@ -168,7 +177,47 @@ void handleClient(SOCKET clientSocket, int clientID) {
 void queueingThread()
 {
     while(true){
+        //loop over every queue and match clients and add them to a game
+        for(int i = 0; i < queues.size(); i++)
+        {
+            std::queue q = queues[i];
+            //if there are at least minimum number of players for that game
+            //TODO: attempt to connect maximum number of players
+            //TODO: group friends to play games together
+            if( q.size() >= gamesdata[i][0])
+            {
+                
+                //mutex lock
+                std::unique_lock<std::mutex> lock(clientsMutex);
+                std::pair<int, SOCKET> client1 = q.front();
+                q.pop();
 
+                
+                std::pair<int, SOCKET> client2 = q.front();
+                q.pop();
+                queues[i] = q;
+
+                //TODO: create game_id hash
+                int game_id = 0;
+
+                //add clients to a game
+                std::vector<int> game = {game_id, i, 0, client1.first, client2.first};
+                ongoing_games.push_back(game);
+
+                lock.unlock();
+
+                //notify clients
+                std::string message = "{\"message\" : \"in game\"}";
+                SOCKET clientSocket = client1.second;
+                broadcastToClient(message, clientSocket, clientSocket);
+
+                clientSocket = client2.second;
+                broadcastToClient(message, clientSocket, clientSocket);
+
+            }
+        }
+        //sleep for some time waiting for clients
+        std::this_thread::sleep_for(std::chrono::seconds(5));
     }
 }
 
@@ -180,11 +229,28 @@ bool loadGamesData()
         return false;
     }
     std::string line;
-    while(std::getline(inputFile, line))
+    while (std::getline(inputFile, line))
     {
-        games.push_back(line);
-        //initialize queues
-        std::queue<int> gameQ;
+        std::stringstream ss(line);
+        std::string gameName, minPlayersStr, maxPlayersStr;
+
+        // Read name and player counts
+        if (!std::getline(ss, gameName, ',') ||
+            !std::getline(ss, minPlayersStr, ',') ||
+            !std::getline(ss, maxPlayersStr, ',')) {
+            std::cerr << "Invalid line format: " << line << std::endl;
+            continue;
+        }
+
+        games.push_back(gameName);
+
+        // Parse integers and store in gamesdata
+        int minPlayers = std::stoi(minPlayersStr);
+        int maxPlayers = std::stoi(maxPlayersStr);
+        gamesdata.push_back({minPlayers, maxPlayers});
+
+        // Initialize queue
+        std::queue<std::pair<int, SOCKET>> gameQ;
         queues.push_back(gameQ);
     }
 
