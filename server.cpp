@@ -31,9 +31,8 @@ std::vector<std::queue<std::pair<int, SOCKET>>                                  
 std::vector<std::string> games;
 std::vector<std::vector<int>> gamesdata;
 
-//ongoing games info
-//vector of games [[game_id, game_type, game_status, client 1, client 2],[0102929, 0, (0 play or 1 end), 1, 2]]
-std::vector<std::vector<int>> ongoing_games;
+//vector of game threads
+std::unordered_map<int, std::thread> ongoing_games_threads;
 
 //clients and client mutex
 std::vector<SOCKET> clients;
@@ -57,6 +56,25 @@ void broadcastMessage(const std::string& message, SOCKET sender) {
 void broadcastToClient(const std::string& message, SOCKET sender, SOCKET receiver) {
     std::lock_guard<std::mutex> lock(clientsMutex);
     send(receiver, message.c_str(), message.length(), 0);
+}
+
+void handleGame(std::vector<std::pair<int, SOCKET>> players, int gameType, int game_id)
+{
+    //Initialize the game
+    //based on game access the game logic 
+
+    bool game_on = true;
+
+    while (game_on)
+    {
+        std::string message = "{\"message\": \"in game and is ongoing\" }";
+        for(auto player : players)
+        {
+            broadcastToClient(message, player.second, player.second);
+        }
+    }
+
+    return;
 }
 
 void handleClient(SOCKET clientSocket, int clientID) {
@@ -176,43 +194,51 @@ void handleClient(SOCKET clientSocket, int clientID) {
 
 void queueingThread()
 {
+    game_id = 0;
     while(true){
         //loop over every queue and match clients and add them to a game
         for(int i = 0; i < queues.size(); i++)
         {
-            std::queue q = queues[i];
+            std::queue<std::pair<int, SOCKET>>& q = queues[i];
             //if there are at least minimum number of players for that game
             //TODO: attempt to connect maximum number of players
             //TODO: group friends to play games together
-            if( q.size() >= gamesdata[i][0])
-            {
-                
-                //mutex lock
-                std::unique_lock<std::mutex> lock(clientsMutex);
-                std::pair<int, SOCKET> client1 = q.front();
-                q.pop();
+            int minPlayers = gamesdata[i][0];
 
-                
-                std::pair<int, SOCKET> client2 = q.front();
-                q.pop();
-                queues[i] = q;
+            
+            if( q.size() >= minPlayers)
+            {             
+                int maxPlayers = gamesdata[i][1];
 
-                //TODO: create game_id hash
-                int game_id = 0;
+                //for players in the queue
+                std::vector<std::pair<int, SOCKET>> players;
 
-                //add clients to a game
-                std::vector<int> game = {game_id, i, 0, client1.first, client2.first};
-                ongoing_games.push_back(game);
+                while(players.size() <= maxPlayers  && !q.empty())
+                {
+                    
+                    //mutex lock
+                    std::unique_lock<std::mutex> lock(clientsMutex);
+                    
+                    //add player to the vector of players
+                    std::pair<int, SOCKET> client = q.front();
+                    q.pop();
+                    
 
-                lock.unlock();
+                    players.push_back(client);
 
-                //notify clients
-                std::string message = "{\"message\" : \"in game\"}";
-                SOCKET clientSocket = client1.second;
-                broadcastToClient(message, clientSocket, clientSocket);
+                    lock.unlock();
 
-                clientSocket = client2.second;
-                broadcastToClient(message, clientSocket, clientSocket);
+                    //try to wait for an update
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    
+                }
+
+                if(players.size() >= minPlayers)
+                {
+                    //start new thread for game
+                    ongoing_games_threads[game_id] = std::thread(handleGame, players, i, game_id);
+                    game_id++;
+                }
 
             }
         }
