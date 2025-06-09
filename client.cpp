@@ -1,3 +1,4 @@
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winsock2.h>
@@ -243,3 +244,15 @@ int main() {
     std::cout << "Client exited.\n";
     return 0;
 }
+
+
+#else
+#include <iostream>
+
+int main()
+{
+    std::cout << "use windows" << std::endl;
+}
+
+
+#endif

@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iostream>
@@ -358,3 +360,14 @@ int main() {
     WSACleanup();
     return 0;
 }
+
+#else
+#include <iostream>
+
+
+int main()
+{
+    std::cout<< "use windows" << std::endl;
+}
+
+#endif
